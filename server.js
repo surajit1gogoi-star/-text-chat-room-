@@ -58,7 +58,7 @@ io.on("connection", socket=>{
     const roomId=socket.data.roomId, room=rooms[roomId];
     const message=String(text||"").trim().slice(0,1000);
     if(!room || !message) return;
-    const item={id:crypto.randomUUID(),name:socket.data.username,text:message,at:Date.now()};
+    const item={id:crypto.randomUUID(),name:socket.data.username||"Guest",text:message,at:Date.now()};
     room.messages.push(item);
     if(room.messages.length>300) room.messages=room.messages.slice(-300);
     saveRooms();
@@ -66,9 +66,10 @@ io.on("connection", socket=>{
   });
   socket.on("disconnect",()=>{
     const roomId=socket.data.roomId;
-    if(roomId) socket.to(roomId).emit("chat:notice",`${socket.data.username} left the room.`);
+    if(roomId && socket.data.username) socket.to(roomId).emit("chat:notice",`${socket.data.username} left the room.`);
   });
 });
 
 app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
 server.listen(PORT,()=>console.log(`text chat running on port ${PORT}`));
+                                     
