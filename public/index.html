@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#2563eb">
+<title>text — Private Chat Rooms</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef2ff;color:#172033;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.app{max-width:760px;height:100dvh;margin:auto;background:#fff;display:flex;flex-direction:column;box-shadow:0 0 35px #1e293b18}
+header{background:#2563eb;color:#fff;padding:17px 20px;display:flex;align-items:center;justify-content:space-between}
+h1{margin:0;font-size:24px;letter-spacing:.2px}header small{opacity:.85}#status{font-size:12px;background:#ffffff25;padding:6px 10px;border-radius:20px}
+main{padding:20px;overflow:auto;flex:1}.card{max-width:520px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:22px;box-shadow:0 10px 30px #1e293b0a}
+h2{font-size:19px;margin:0 0 8px}.muted{color:#64748b;font-size:13px;line-height:1.5;margin:0 0 18px}
+label{display:block;font-size:13px;font-weight:650;margin:12px 0 6px}input{width:100%;font:inherit;padding:12px;border:1px solid #cbd5e1;border-radius:11px;outline:none}
+input:focus{border-color:#2563eb;box-shadow:0 0 0 3px #2563eb18}
+button{font:600 14px system-ui;border:0;border-radius:11px;background:#2563eb;color:white;padding:12px 16px;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}.primary{width:100%;margin-top:16px}.secondary{background:#e2e8f0;color:#1e293b}
+#alert{font-size:13px;color:#b91c1c;min-height:20px;margin-top:10px}
+#shareBox{display:none;background:#eff6ff;padding:12px;border-radius:12px;margin-top:14px;overflow-wrap:anywhere;font-size:13px}
+#chat{display:none;flex:1;min-height:0;flex-direction:column}#roomInfo{padding:10px 16px;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:12px}
+#messages{flex:1;overflow:auto;padding:16px;background:linear-gradient(#f8fafc,#eef2ff)}
+.msg{max-width:82%;margin:0 0 11px;padding:10px 13px;border-radius:15px;background:white;box-shadow:0 2px 8px #0f172a0c;overflow-wrap:anywhere}
+.msg.mine{margin-left:auto;background:#dbeafe;border-bottom-right-radius:5px}.meta{font-size:11px;color:#64748b;margin-bottom:4px}.body{white-space:pre-wrap;line-height:1.4}
+.notice{text-align:center;color:#64748b;font-size:12px;margin:10px}
+#sendForm{display:flex;gap:8px;padding:12px;border-top:1px solid #e5e7eb}#sendForm input{flex:1}#sendForm button{min-width:72px}
+footer{text-align:center;color:#94a3b8;font-size:11px;padding:8px}
+@media(max-width:480px){main{padding:12px}.card{padding:18px;margin:12px auto}header{padding:14px}}
+</style>
+</head>
+<body><div class="app">
+<header><div><h1>text</h1><small>Private text chat rooms</small></div><span id="status">Ready</span></header>
+<main id="landing">
+  <section class="card" id="homeCard">
+    <h2>Create a private room</h2><p class="muted">Make a room, set a password, then share its link with the person you want to chat with.</p>
+    <label for="creatorName">Your name</label><input id="creatorName" maxlength="24" placeholder="Enter your name">
+    <label for="newPassword">Room password (at least 6 characters)</label><input id="newPassword" type="password" minlength="6" placeholder="Create a password">
+    <button class="primary" id="createBtn">Create chat room</button>
+    <div id="shareBox"><strong>Room created!</strong><p id="shareLink"></p><button class="secondary" id="copyLink">Copy room link</button><p class="muted">Share the link and password separately with your friend.</p></div>
+    <div id="alert"></div>
+  </section>
+  <section class="card" id="joinCard" style="display:none">
+    <h2>Join private room</h2><p class="muted">You opened a private room link. Enter your name and the room password to join.</p>
+    <label for="joinName">Your name</label><input id="joinName" maxlength="24" placeholder="Enter your name">
+    <label for="joinPassword">Room password</label><input id="joinPassword" type="password" placeholder="Enter room password">
+    <button class="primary" id="joinBtn">Join chat room</button><div id="joinAlert" style="color:#b91c1c;font-size:13px;margin-top:10px"></div>
+  </section>
+</main>
+<section id="chat">
+ <div id="roomInfo">Private room · Text messages only</div>
+ <div id="messages"><div class="notice">You are connected to this private room.</div></div>
+ <form id="sendForm"><input id="message" maxlength="1000" placeholder="Write a message…" autocomplete="off"><button>Send</button></form>
+</section>
+<footer>Only people with the room link and password can join. Do not share passwords publicly.</footer>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const socket=io();
+const pathParts=location.pathname.split("/").filter(Boolean);
+const roomId=pathParts[0]==="room"?pathParts[1]:null;
+let myName="",joined=false;
+if(roomId){$("#homeCard").style.display="none";$("#joinCard").style.display="block";}
+function setStatus(t){$("#status").textContent=t;}
+function showChat(){ $("#landing").style.display="none";$("#chat").style.display="flex";setStatus("In room"); }
+function addMessage(m,mine=false){
+ const el=document.createElement("div");el.className="msg"+(mine?" mine":"");
+ const meta=document.createElement("div");meta.className="meta";
+ meta.textContent=(m.name||"Guest")+" · "+new Date(m.at||Date.now()).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+ const body=document.createElement("div");body.className="body";body.textContent=m.text;
+ el.append(meta,body);$("#messages").append(el);$("#messages").scrollTop=$("#messages").scrollHeight;
+}
+function addNotice(t){const el=document.createElement("div");el.className="notice";el.textContent=t;$("#messages").append(el);}
+$("#createBtn").onclick=async()=>{
+ const name=$("#creatorName").value.trim(),password=$("#newPassword").value;
+ $("#alert").textContent="";
+ if(!name){$("#alert").textContent="Enter your name.";return;}
+ if(password.length<6){$("#alert").textContent="Password must be at least 6 characters.";return;}
+ $("#createBtn").disabled=true;
+ try{
+  const r=await fetch("/api/rooms",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,password})});
+  const data=await r.json();if(!r.ok)throw new Error(data.error||"Could not create room.");
+  $("#shareBox").style.display="block";$("#shareLink").textContent=data.url;
+  $("#copyLink").onclick=async()=>{try{await navigator.clipboard.writeText(data.url);$("#copyLink").textContent="Copied!";}catch(e){$("#shareLink").textContent=data.url+" (Select and copy this link)";}};
+  history.replaceState({}, "", "/room/"+data.id);
+  $("#homeCard").style.display="none";$("#joinCard").style.display="block";
+  $("#joinName").value=name;$("#joinPassword").value=password;
+  joinRoom(data.id,name,password);
+ }catch(e){$("#alert").textContent=e.message;}finally{$("#createBtn").disabled=false;}
+};
+$("#joinBtn").onclick=()=>joinRoom(roomId,$("#joinName").value.trim(),$("#joinPassword").value);
+function joinRoom(id,name,password){
+ $("#joinAlert").textContent="";
+ if(!name){$("#joinAlert").textContent="Enter your name.";return;}
+ if(!password){$("#joinAlert").textContent="Enter the room password.";return;}
+ myName=name.slice(0,24);socket.emit("room:join",{roomId:id,password,name:myName});
+}
+socket.on("room:joined",data=>{
+ if(joined)return;joined=true;showChat();$("#messages").replaceChildren();
+ (data.messages||[]).forEach(m=>addMessage(m,m.name===myName));
+ addNotice("You joined the private room.");
+});
+socket.on("room:error",msg=>{$("#joinAlert").textContent=msg;setStatus("Not joined");});
+socket.on("chat:message",m=>addMessage(m,m.name===myName));
+socket.on("chat:notice",addNotice);
+$("#sendForm").onsubmit=e=>{
+ e.preventDefault();const text=$("#message").value.trim();if(!joined||!text)return;
+ socket.emit("chat:message",{text});$("#message").value="";
+};
+socket.on("connect",()=>setStatus("Connected"));
+socket.on("disconnect",()=>setStatus("Reconnecting…"));
+</script>
+</body></html>
